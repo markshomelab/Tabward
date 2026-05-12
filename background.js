@@ -1,51 +1,50 @@
 // background.js — service worker for Tabward
 
 const ENABLED_KEY = "focusEnabled";
+let isEnabled = true; // in-memory cache of current state
 
-// Initialize state on install and default to ON
+// Initialize on install
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get(ENABLED_KEY, (result) => {
     if (result[ENABLED_KEY] === undefined) {
       chrome.storage.local.set({ [ENABLED_KEY]: true });
+      isEnabled = true;
+    } else {
+      isEnabled = result[ENABLED_KEY] === true;
     }
-    updateIcon(result[ENABLED_KEY] === true);
+    updateIcon(isEnabled);
   });
 });
 
-// Restore icon state on service worker startup
+// Restore state on service worker startup
 chrome.storage.local.get(ENABLED_KEY, (result) => {
-  updateIcon(result[ENABLED_KEY] === true);
+  isEnabled = result[ENABLED_KEY] === true;
+  updateIcon(isEnabled);
 });
 
 // Listen for new tabs being created
 chrome.tabs.onCreated.addListener((tab) => {
-  chrome.storage.local.get(ENABLED_KEY, (result) => {
-    const isEnabled = result[ENABLED_KEY] === true;
-    if (isEnabled && tab.id !== undefined) {
-      // Small delay to let Chrome finish creating the tab before focusing
-      setTimeout(() => {
-        chrome.tabs.update(tab.id, { active: true }, () => {
-          if (chrome.runtime.lastError) {
-            // Tab may have been closed already; ignore the error
-            return;
-          }
-          // Also bring the tab's window to focus
-          if (tab.windowId !== undefined) {
-            chrome.windows.update(tab.windowId, { focused: true });
-          }
-        });
-      }, 50);
-    }
-  });
+  if (isEnabled && tab.id !== undefined) {
+    // Small delay to let Chrome finish creating the tab before focusing
+    setTimeout(() => {
+      chrome.tabs.update(tab.id, { active: true }, () => {
+        if (chrome.runtime.lastError) {
+          // Tab may have been closed already; ignore the error
+          return;
+        }
+        if (tab.windowId !== undefined) {
+          chrome.windows.update(tab.windowId, { focused: true });
+        }
+      });
+    }, 50);
+  }
 });
 
 // Toggle state on toolbar icon click
 chrome.action.onClicked.addListener(() => {
-  chrome.storage.local.get(ENABLED_KEY, (result) => {
-    const newState = !(result[ENABLED_KEY] === true);
-    chrome.storage.local.set({ [ENABLED_KEY]: newState }, () => {
-      updateIcon(newState);
-    });
+  isEnabled = !isEnabled;
+  chrome.storage.local.set({ [ENABLED_KEY]: isEnabled }, () => {
+    updateIcon(isEnabled);
   });
 });
 
