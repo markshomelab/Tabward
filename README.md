@@ -66,6 +66,8 @@ Neither permission is used for anything beyond those two functions.
 
 **v1.0.0** — Initial release.
 
+**v1.0.1** — Fixed a race condition where the extension could briefly act while disabled, immediately after browser startup or when toggling quickly.
+
 ---
 
 ## Contributing
