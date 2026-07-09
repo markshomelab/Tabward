@@ -1,54 +1,70 @@
 // background.js — service worker for Tabward
 
 const ENABLED_KEY = "focusEnabled";
-let isEnabled = true; // in-memory cache of current state
 
-// Initialize on install
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.get(ENABLED_KEY, (result) => {
-    if (result[ENABLED_KEY] === undefined) {
-      chrome.storage.local.set({ [ENABLED_KEY]: true });
-      isEnabled = true;
-    } else {
-      isEnabled = result[ENABLED_KEY] === true;
-    }
-    updateIcon(isEnabled);
-  });
-});
+// Read the current state directly from storage every time.
+// We deliberately do NOT cache this in a variable: MV3 service
+// workers are killed and restarted constantly, and a cached value
+// can be stale in the window between wake-up and the storage read.
+// That was the cause of the v1.0.0 race condition.
+async function getEnabled() {
+  const result = await chrome.storage.local.get(ENABLED_KEY);
+  return result[ENABLED_KEY] === true;
+}
 
-// Restore state on service worker startup
-chrome.storage.local.get(ENABLED_KEY, (result) => {
-  isEnabled = result[ENABLED_KEY] === true;
-  updateIcon(isEnabled);
-});
+// Write the new state and refresh the icon to match.
+async function setEnabled(value) {
+  await chrome.storage.local.set({ [ENABLED_KEY]: value });
+  updateIcon(value);
+}
 
-// Listen for new tabs being created
-chrome.tabs.onCreated.addListener((tab) => {
-  if (isEnabled && tab.id !== undefined) {
-    // Small delay to let Chrome finish creating the tab before focusing
-    setTimeout(() => {
-      chrome.tabs.update(tab.id, { active: true }, () => {
-        if (chrome.runtime.lastError) {
-          // Tab may have been closed already; ignore the error
-          return;
-        }
-        if (tab.windowId !== undefined) {
-          chrome.windows.update(tab.windowId, { focused: true });
-        }
-      });
-    }, 50);
+// Flip the state. Reads from storage first so the toggle always
+// starts from the real current value, never a stale default.
+async function toggle() {
+  const enabled = await getEnabled();
+  await setEnabled(!enabled);
+}
+
+// First install: default to enabled.
+chrome.runtime.onInstalled.addListener(async (details) => {
+  const result = await chrome.storage.local.get(ENABLED_KEY);
+  if (result[ENABLED_KEY] === undefined) {
+    await setEnabled(true);
+  } else {
+    updateIcon(result[ENABLED_KEY] === true);
   }
 });
 
-// Toggle state on toolbar icon click
-chrome.action.onClicked.addListener(() => {
-  isEnabled = !isEnabled;
-  chrome.storage.local.set({ [ENABLED_KEY]: isEnabled }, () => {
-    updateIcon(isEnabled);
-  });
+// On every service worker startup, sync the icon with stored state.
+getEnabled().then(updateIcon);
+
+// Focus new tabs when enabled.
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (tab.id === undefined) return;
+
+  const enabled = await getEnabled();
+  if (!enabled) return;
+
+  // Small delay to let Chrome finish creating the tab before focusing
+  setTimeout(() => {
+    chrome.tabs.update(tab.id, { active: true }, () => {
+      if (chrome.runtime.lastError) {
+        // Tab may have been closed already; ignore the error
+        return;
+      }
+      if (tab.windowId !== undefined) {
+        chrome.windows.update(tab.windowId, { focused: true });
+      }
+    });
+  }, 50);
 });
 
-// Update the toolbar icon and tooltip to reflect current state
+// Toggle on toolbar icon click.
+chrome.action.onClicked.addListener(() => {
+  toggle();
+});
+
+// Update the toolbar icon and tooltip to reflect current state.
 function updateIcon(enabled) {
   const suffix = enabled ? "on" : "off";
   chrome.action.setIcon({

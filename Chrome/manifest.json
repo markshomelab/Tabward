@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tabward",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automatically focuses new tabs when they are opened. Click the toolbar icon to enable or disable.",
   "permissions": [
     "tabs",
@@ -17,7 +17,7 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "New Tab Focus: Click to toggle"
+    "default_title": "Tabward: Click to toggle"
   },
   "icons": {
     "16": "icons/icon16.png",
