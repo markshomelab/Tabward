@@ -1,23 +1,48 @@
 // background.js — event page for Tabward (Firefox MV3)
 
 const ENABLED_KEY = "focusEnabled";
-let isEnabled = true; // in-memory cache of current state
 
-// Load state on startup. Runs on every event-page wake-up.
-chrome.storage.local.get(ENABLED_KEY, (result) => {
+// Read the current state directly from storage every time.
+// We deliberately do NOT cache this in a variable: event pages are
+// suspended and restarted by the browser, and a cached value can be
+// stale in the window between wake-up and the storage read.
+async function getEnabled() {
+  const result = await chrome.storage.local.get(ENABLED_KEY);
+  return result[ENABLED_KEY] === true;
+}
+
+// Write the new state and refresh the icon to match.
+async function setEnabled(value) {
+  await chrome.storage.local.set({ [ENABLED_KEY]: value });
+  updateIcon(value);
+}
+
+// Flip the state. Reads from storage first so the toggle always
+// starts from the real current value, never a stale default.
+async function toggle() {
+  const enabled = await getEnabled();
+  await setEnabled(!enabled);
+}
+
+// First install: default to enabled.
+chrome.runtime.onInstalled.addListener(async () => {
+  const result = await chrome.storage.local.get(ENABLED_KEY);
   if (result[ENABLED_KEY] === undefined) {
-    // First run, default to enabled.
-    chrome.storage.local.set({ [ENABLED_KEY]: true });
-    isEnabled = true;
+    await setEnabled(true);
   } else {
-    isEnabled = result[ENABLED_KEY] === true;
+    updateIcon(result[ENABLED_KEY] === true);
   }
-  updateIcon(isEnabled);
 });
 
-// Listen for new tabs being created
-chrome.tabs.onCreated.addListener((tab) => {
-  if (!isEnabled || tab.id === undefined) return;
+// On every event page startup, sync the icon with stored state.
+getEnabled().then(updateIcon);
+
+// Focus new tabs when enabled.
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (tab.id === undefined) return;
+
+  const enabled = await getEnabled();
+  if (!enabled) return;
 
   // Small delay to let the browser finish creating the tab before focusing
   setTimeout(() => {
@@ -33,15 +58,12 @@ chrome.tabs.onCreated.addListener((tab) => {
   }, 50);
 });
 
-// Toggle state on toolbar icon click
+// Toggle on toolbar icon click.
 chrome.action.onClicked.addListener(() => {
-  isEnabled = !isEnabled;
-  chrome.storage.local.set({ [ENABLED_KEY]: isEnabled }, () => {
-    updateIcon(isEnabled);
-  });
+  toggle();
 });
 
-// Update the toolbar icon and tooltip to reflect current state
+// Update the toolbar icon and tooltip to reflect current state.
 function updateIcon(enabled) {
   const suffix = enabled ? "on" : "off";
   chrome.action.setIcon({
