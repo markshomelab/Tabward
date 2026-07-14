@@ -64,9 +64,11 @@ Neither permission is used for anything beyond those two functions.
 
 ## Changelog
 
-**v1.0.0** — Initial release.
+**v1.0.0** 2026-07-14 - Initial Firefox extension release.
 
-**v1.0.1** — Fixed a race condition where the extension could briefly act while disabled, immediately after browser startup or when toggling quickly.
+**v1.0.1** 2025-07-09 - Fixed a race condition where the extension could briefly act while disabled, immediately after browser startup or when toggling quickly.
+
+**v1.0.0** 20216-05-12 - Initial Chrome extension release.
 
 ---
 
